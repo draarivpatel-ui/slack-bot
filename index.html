@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aariv Bot - Slack Bolt Socket Mode Simulator (#stardance-bot-testing)</title>
+  <style>
+    :root {
+      --sidebar-bg: #19171d;
+      --sidebar-hover: #27242c;
+      --sidebar-active: #1164a3;
+      --chat-bg: #1a1d21;
+      --panel-bg: #222529;
+      --border: #35373b;
+      --text: #d1d2d3;
+      --text-bright: #ffffff;
+      --text-muted: #ababad;
+      --accent-green: #2bac76;
+      --accent-blue: #1d9bd1;
+      --accent-purple: #611f69;
+      --bot-badge: #383c42;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--chat-bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Top bar */
+    .topbar {
+      height: 44px;
+      background: #121016;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      flex-shrink: 0;
+    }
+
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .dots {
+      display: flex;
+      gap: 6px;
+      margin-right: 8px;
+    }
+
+    .dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+    }
+    .dot.r { background: #ff5f56; }
+    .dot.y { background: #ffbd2e; }
+    .dot.g { background: #27c93f; }
+
+    .ws-pill {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--text-bright);
+      background: #2b2733;
+      border: 1px solid #453e52;
+      padding: 4px 10px;
+      border-radius: 6px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.76rem;
+      color: #8ce99a;
+      background: rgba(43, 172, 118, 0.14);
+      border: 1px solid rgba(43, 172, 118, 0.4);
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-weight: 600;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      box-shadow: 0 0 6px var(--accent-green);
+    }
+
+    .topbar-right a {
+      color: var(--text-bright);
+      background: #2c2d30;
+      border: 1px solid #484a4f;
+      text-decoration: none;
+      font-size: 0.78rem;
+      font-weight: 600;
+      padding: 5px 11px;
+      border-radius: 6px;
+    }
+
+    .topbar-right a:hover {
+      background: #3a3c40;
+    }
+
+    /* Main Workspace Layout */
+    .workspace {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 240px 1fr 340px;
+      min-height: 0;
+    }
+
+    /* Left Sidebar */
+    .sidebar {
+      background: var(--sidebar-bg);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      padding: 14px 10px;
+      gap: 18px;
+      overflow-y: auto;
+    }
+
+    .ws-header {
+      padding: 0 8px 10px;
+      border-bottom: 1px solid #2c2833;
+    }
+
+    .ws-header h2 {
+      font-size: 1rem;
+      color: var(--text-bright);
+      font-weight: 800;
+    }
+
+    .ws-header p {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .nav-section h3 {
+      font-size: 0.73rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      padding: 0 8px;
+      margin-bottom: 6px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 0.86rem;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .nav-item.active {
+      background: var(--sidebar-active);
+      color: var(--text-bright);
+      font-weight: 600;
+    }
+
+    .app-meta-card {
+      margin-top: auto;
+      background: #231f29;
+      border: 1px solid #383242;
+      border-radius: 8px;
+      padding: 10px;
+      font-size: 0.76rem;
+      line-height: 1.45;
+    }
+
+    .app-meta-card h4 {
+      color: var(--text-bright);
+      font-size: 0.8rem;
+      margin-bottom: 6px;
+    }
+
+    .meta-row {
+      display: flex;
+      justify-content: space-between;
+      color: var(--text-muted);
+      margin-bottom: 3px;
+    }
+
+    .meta-row code {
+      color: #8ce99a;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    /* Center Channel View */
+    .channel-pane {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      background: var(--chat-bg);
+    }
+
+    .channel-header {
+      height: 54px;
+      border-bottom: 1px solid var(--border);
+      padding: 0 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .channel-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .channel-title h1 {
+      font-size: 1.05rem;
+      font-weight: 800;
+      color: var(--text-bright);
+    }
+
+    .channel-topic {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .msg {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      padding: 4px 6px;
+      border-radius: 8px;
+    }
+
+    .msg:hover {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 0.9rem;
+      color: #fff;
+      flex-shrink: 0;
+    }
+
+    .avatar.user {
+      background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+    }
+
+    .avatar.bot {
+      background: linear-gradient(135deg, #10b981, #047857);
+    }
+
+    .msg-body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .msg-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 3px;
+    }
+
+    .sender {
+      font-weight: 700;
+      font-size: 0.9rem;
+      color: var(--text-bright);
+    }
+
+    .app-tag {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      background: var(--bot-badge);
+      color: #c9cbcf;
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
+
+    .timestamp {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+
+    .msg-text {
+      font-size: 0.9rem;
+      line-height: 1.45;
+      color: var(--text);
+      white-space: pre-wrap;
+    }
+
+    .cmd-pill {
+      display: inline-block;
+      background: rgba(29, 155, 209, 0.16);
+      color: #5cc3f0;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.85rem;
+      padding: 1px 6px;
+      border-radius: 4px;
+      border: 1px solid rgba(29, 155, 209, 0.35);
+    }
+
+    .thread-box {
+      margin-top: 6px;
+      padding-left: 10px;
+      border-left: 3px solid #3b82f6;
+      font-size: 0.84rem;
+      color: #b9bbbe;
+    }
+
+    /* Composer & Quick Chips */
+    .composer-area {
+      padding: 12px 20px 16px;
+      border-top: 1px solid var(--border);
+      background: #1e2126;
+    }
+
+    .chips-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+
+    .chips-label {
+      font-size: 0.74rem;
+      color: var(--text-muted);
+      font-weight: 600;
+      margin-right: 4px;
+    }
+
+    .chip {
+      background: #2b2f36;
+      color: #72c7f2;
+      border: 1px solid #3f4652;
+      border-radius: 6px;
+      padding: 4px 9px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.76rem;
+      cursor: pointer;
+      transition: background 0.12s, border-color 0.12s;
+    }
+
+    .chip:hover {
+      background: #353b45;
+      border-color: #5cc3f0;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 8px;
+      background: var(--panel-bg);
+      border: 1px solid #494d54;
+      border-radius: 8px;
+      padding: 8px 10px;
+    }
+
+    .input-row input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text-bright);
+      font-size: 0.9rem;
+      font-family: inherit;
+    }
+
+    .send-btn {
+      background: var(--accent-green);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-weight: 700;
+      font-size: 0.82rem;
+      cursor: pointer;
+    }
+
+    .send-btn:hover {
+      filter: brightness(1.08);
+    }
+
+    /* Right Inspector Panel */
+    .inspector {
+      background: #16181c;
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .inspector-header {
+      height: 54px;
+      border-bottom: 1px solid var(--border);
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .inspector-header h2 {
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: var(--text-bright);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .inspector-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .inspector-card {
+      background: #1f2228;
+      border: 1px solid #30343d;
+      border-radius: 8px;
+      padding: 11px;
+    }
+
+    .inspector-card h3 {
+      font-size: 0.78rem;
+      color: #8ce99a;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 8px;
+    }
+
+    .socket-log {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.74rem;
+      line-height: 1.5;
+      color: #c5c8c6;
+      max-height: 220px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .log-entry {
+      background: #14161a;
+      border-left: 3px solid var(--accent-green);
+      padding: 5px 8px;
+      border-radius: 4px;
+    }
+
+    .code-preview {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.72rem;
+      line-height: 1.45;
+      color: #d7dae0;
+      background: #121417;
+      padding: 9px;
+      border-radius: 6px;
+      overflow-x: auto;
+      white-space: pre;
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="dots">
+        <span class="dot r"></span>
+        <span class="dot y"></span>
+        <span class="dot g"></span>
+      </div>
+      <span class="ws-pill">Hack Club Slack - Interactive Bot Sandbox</span>
+      <span class="status-pill"><span class="status-dot"></span> Socket Mode Connected (wss://wss-primary.slack.com/)</span>
+    </div>
+    <div class="topbar-right">
+      <a href="https://github.com/draarivpatel-ui/slack-bot" target="_blank" rel="noopener">View Node.js + Bolt Source (index.js)</a>
+    </div>
+  </div>
+
+  <div class="workspace">
+    <!-- Left Sidebar -->
+    <aside class="sidebar">
+      <div class="ws-header">
+        <h2>Hack Club</h2>
+        <p>Aariv Patel (Stardance Mission)</p>
+      </div>
+
+      <div class="nav-section">
+        <h3>Channels</h3>
+        <div class="nav-item active"># stardance-bot-testing</div>
+        <div class="nav-item"># stardance</div>
+        <div class="nav-item"># slack-bots</div>
+      </div>
+
+      <div class="nav-section">
+        <h3>Apps (Socket Mode)</h3>
+        <div class="nav-item active">
+          <span class="status-dot"></span> Aariv Bot
+        </div>
+      </div>
+
+      <div class="app-meta-card">
+        <h4>Slack App Manifest</h4>
+        <div class="meta-row"><span>App Name</span><code>Aariv Bot</code></div>
+        <div class="meta-row"><span>App ID</span><code>A0CBXFS7BKL</code></div>
+        <div class="meta-row"><span>Framework</span><code>@slack/bolt ^5</code></div>
+        <div class="meta-row"><span>Transport</span><code>Socket Mode</code></div>
+        <div class="meta-row"><span>Command Prefix</span><code>/aariv-*</code></div>
+        <div class="meta-row"><span>Scopes</span><code>commands, chat:write</code></div>
+      </div>
+    </aside>
+
+    <!-- Center Chat Pane -->
+    <main class="channel-pane">
+      <div class="channel-header">
+        <div class="channel-title">
+          <h1>#stardance-bot-testing</h1>
+          <span class="channel-topic">Live interactive simulator for Aariv Bot (/aariv-ping, /aariv-hello, /aariv-roll, /aariv-fact, /aariv-help)</span>
+        </div>
+      </div>
+
+      <div class="messages" id="messagesList"></div>
+
+      <div class="composer-area">
+        <div class="chips-bar">
+          <span class="chips-label">Try Slash Command:</span>
+          <button class="chip" data-cmd="/aariv-ping">/aariv-ping</button>
+          <button class="chip" data-cmd="/aariv-hello">/aariv-hello</button>
+          <button class="chip" data-cmd="/aariv-hello tacos">/aariv-hello tacos</button>
+          <button class="chip" data-cmd="/aariv-roll">/aariv-roll</button>
+          <button class="chip" data-cmd="/aariv-roll 2d6">/aariv-roll 2d6</button>
+          <button class="chip" data-cmd="/aariv-roll 2d20">/aariv-roll 2d20</button>
+          <button class="chip" data-cmd="/aariv-fact">/aariv-fact</button>
+          <button class="chip" data-cmd="/aariv-help">/aariv-help</button>
+          <button class="chip" data-cmd="@Aariv Bot hey there!">@Aariv Bot</button>
+        </div>
+        <form class="input-row" id="chatForm">
+          <input
+            type="text"
+            id="chatInput"
+            placeholder="Type a slash command like /aariv-roll 2d20 or mention @Aariv Bot..."
+            autocomplete="off"
+          />
+          <button type="submit" class="send-btn">Send</button>
+        </form>
+      </div>
+    </main>
+
+    <!-- Right Inspector -->
+    <aside class="inspector">
+      <div class="inspector-header">
+        <h2>Bolt Socket Mode Inspector</h2>
+      </div>
+      <div class="inspector-content">
+        <div class="inspector-card">
+          <h3>WebSocket Event Stream</h3>
+          <div class="socket-log" id="socketLog"></div>
+        </div>
+
+        <div class="inspector-card">
+          <h3>Active Handler (index.js)</h3>
+          <div class="code-preview" id="codePreview">// Click any command chip or send a message
+// to inspect the Bolt handler that executes it.
+
+const app = new App({
+  token: process.env.SLACK_BOT_TOKEN,
+  appToken: process.env.SLACK_APP_TOKEN,
+  socketMode: true
+});</div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    (() => {
+      const PREFIX = "aariv";
+      const messagesList = document.getElementById("messagesList");
+      const socketLog = document.getElementById("socketLog");
+      const codePreview = document.getElementById("codePreview");
+      const chatForm = document.getElementById("chatForm");
+      const chatInput = document.getElementById("chatInput");
+
+      const HANDLER_SNIPPETS = {
+        ping: `app.command("/aariv-ping", async ({ ack, respond }) => {
+  const start = Date.now();
+  await ack();
+  const latency = Date.now() - start;
+  await respond({ text: \`Pong! Latency \${latency}ms\` });
+});`,
+        hello: `app.command("/aariv-hello", async ({ command, ack, respond }) => {
+  await ack();
+  const name = "Aariv Patel";
+  const extra = (command.text || "").trim();
+  const message = extra
+    ? \`Hello, \${name}! You said "\${extra}".\`
+    : \`Hello, \${name}! Type /aariv-help to see what else I can do.\`;
+  await respond({ text: message });
+});`,
+        roll: `app.command("/aariv-roll", async ({ command, ack, respond }) => {
+  await ack();
+  const dice = parseDice(command.text || "1d6");
+  const rolls = Array.from({ length: dice.count }, () =>
+    Math.floor(Math.random() * dice.sides) + 1
+  );
+  const total = rolls.reduce((s, n) => s + n, 0);
+  await respond({
+    text: \`Rolled \${dice.count}d\${dice.sides} (\${rolls.join(", ")}) for a total of \${total}\`
+  });
+});`,
+        fact: `app.command("/aariv-fact", async ({ ack, respond }) => {
+  await ack();
+  const fact = await fetchFact(); // uselessfacts.jsph.pl -> catfact.ninja
+  await respond({ text: \`Fun fact\\n\${fact}\` });
+});`,
+        help: `app.command("/aariv-help", async ({ ack, respond }) => {
+  await ack();
+  await respond({
+    text: [
+      "Available commands",
+      "/aariv-ping - check bot latency",
+      "/aariv-hello - say hello",
+      "/aariv-roll - roll a dice (1d6 or NdM)",
+      "/aariv-fact - a random fun fact",
+      "/aariv-help - this list"
+    ].join("\\n")
+  });
+});`,
+        mention: `app.event("app_mention", async ({ event, say }) => {
+  await say({
+    text: \`Hi <@\${event.user}>! Type /aariv-help to see what I can do.\`,
+    thread_ts: event.ts
+  });
+});`
+      };
+
+      const FALLBACK_FACTS = [
+        "Honey never spoils. Archaeologists have found pots of honey in ancient Egyptian tombs that are over 3,000 years old and still edible.",
+        "Octopuses have three hearts, nine brains, and blue blood.",
+        "A day on Venus is longer than a year on Venus.",
+        "Bananas are curved because they grow toward the sun against gravity in a process called negative geotropism."
+      ];
+
+      function formatTime() {
+        const d = new Date();
+        return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      }
+
+      function addSocketLog(type, detail) {
+        const div = document.createElement("div");
+        div.className = "log-entry";
+        div.textContent = `[${formatTime()}] ${type}: ${detail}`;
+        socketLog.prepend(div);
+      }
+
+      function appendMessage({ sender, isBot, text, isCommand = false, threadReply = null }) {
+        const row = document.createElement("div");
+        row.className = "msg";
+
+        const av = document.createElement("div");
+        av.className = `avatar ${isBot ? "bot" : "user"}`;
+        av.textContent = isBot ? "AB" : "AP";
+
+        const body = document.createElement("div");
+        body.className = "msg-body";
+
+        const meta = document.createElement("div");
+        meta.className = "msg-meta";
+
+        const nameEl = document.createElement("span");
+        nameEl.className = "sender";
+        nameEl.textContent = sender;
+        meta.appendChild(nameEl);
+
+        if (isBot) {
+          const badge = document.createElement("span");
+          badge.className = "app-tag";
+          badge.textContent = "APP";
+          meta.appendChild(badge);
+        }
+
+        const timeEl = document.createElement("span");
+        timeEl.className = "timestamp";
+        timeEl.textContent = formatTime();
+        meta.appendChild(timeEl);
+
+        const contentEl = document.createElement("div");
+        contentEl.className = "msg-text";
+        if (isCommand) {
+          const pill = document.createElement("span");
+          pill.className = "cmd-pill";
+          pill.textContent = text;
+          contentEl.appendChild(pill);
+        } else {
+          contentEl.textContent = text;
+        }
+
+        body.appendChild(meta);
+        body.appendChild(contentEl);
+
+        if (threadReply) {
+          const tbox = document.createElement("div");
+          tbox.className = "thread-box";
+          tbox.textContent = `Thread reply from Aariv Bot: ${threadReply}`;
+          body.appendChild(tbox);
+        }
+
+        row.appendChild(av);
+        row.appendChild(body);
+        messagesList.appendChild(row);
+        messagesList.scrollTop = messagesList.scrollHeight;
+      }
+
+      // Exact parseDice function from index.js
+      function parseDice(text) {
+        const match = (text || "").trim().toLowerCase().match(/^(\d{1,2})?d(\d{1,4})$/);
+        if (!match) return null;
+        const count = match[1] ? parseInt(match[1], 10) : 1;
+        const sides = parseInt(match[2], 10);
+        if (count < 1 || count > 10 || sides < 2 || sides > 1000) return null;
+        return { count, sides };
+      }
+
+      async function fetchFact() {
+        try {
+          const res = await fetch("https://uselessfacts.jsph.pl/api/v2/facts/random");
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.text) return data.text;
+          }
+        } catch (_) {}
+        return FALLBACK_FACTS[Math.floor(Math.random() * FALLBACK_FACTS.length)];
+      }
+
+      async function handleInput(raw) {
+        const input = raw.trim();
+        if (!input) return;
+
+        const isSlash = input.startsWith("/");
+        appendMessage({
+          sender: "Aariv Patel",
+          isBot: false,
+          text: input,
+          isCommand: isSlash
+        });
+
+        if (isSlash) {
+          const parts = input.split(/\s+/);
+          const cmd = parts[0].toLowerCase();
+          const argText = parts.slice(1).join(" ");
+
+          addSocketLog("slash_commands", `payload command="${cmd}" text="${argText}"`);
+          addSocketLog("ack()", "200 OK sent over WebSocket in 2ms");
+
+          if (cmd === `/${PREFIX}-ping`) {
+            codePreview.textContent = HANDLER_SNIPPETS.ping;
+            const latency = Math.floor(Math.random() * 6) + 2;
+            appendMessage({
+              sender: "Aariv Bot",
+              isBot: true,
+              text: `Pong! Latency ${latency}ms`
+            });
+          } else if (cmd === `/${PREFIX}-hello`) {
+            codePreview.textContent = HANDLER_SNIPPETS.hello;
+            const name = "Aariv Patel";
+            const msg = argText
+              ? `Hello, ${name}! You said "${argText}".`
+              : `Hello, ${name}! Type /${PREFIX}-help to see what else I can do.`;
+            appendMessage({ sender: "Aariv Bot", isBot: true, text: msg });
+          } else if (cmd === `/${PREFIX}-roll`) {
+            codePreview.textContent = HANDLER_SNIPPETS.roll;
+            const dice = argText ? parseDice(argText) : parseDice("1d6");
+            if (!dice) {
+              appendMessage({
+                sender: "Aariv Bot",
+                isBot: true,
+                text: `I did not understand "${argText}". Try /${PREFIX}-roll or /${PREFIX}-roll 2d20.`
+              });
+              return;
+            }
+            const rolls = [];
+            for (let i = 0; i < dice.count; i += 1) {
+              rolls.push(Math.floor(Math.random() * dice.sides) + 1);
+            }
+            const total = rolls.reduce((sum, n) => sum + n, 0);
+            const label = `${dice.count}d${dice.sides}`;
+            const breakdown = dice.count > 1 ? ` (${rolls.join(", ")})` : "";
+            appendMessage({
+              sender: "Aariv Bot",
+              isBot: true,
+              text: `Rolled ${label}${breakdown} for a total of ${total}`
+            });
+          } else if (cmd === `/${PREFIX}-fact`) {
+            codePreview.textContent = HANDLER_SNIPPETS.fact;
+            const fact = await fetchFact();
+            appendMessage({
+              sender: "Aariv Bot",
+              isBot: true,
+              text: `Fun fact\n${fact}`
+            });
+          } else if (cmd === `/${PREFIX}-help`) {
+            codePreview.textContent = HANDLER_SNIPPETS.help;
+            appendMessage({
+              sender: "Aariv Bot",
+              isBot: true,
+              text: [
+                "Available commands",
+                `/${PREFIX}-ping - check bot latency`,
+                `/${PREFIX}-hello - say hello (add a word and the bot greets you back about it)`,
+                `/${PREFIX}-roll - roll a dice, bare for 1d6 or like /${PREFIX}-roll 2d20`,
+                `/${PREFIX}-fact - a random fun fact`,
+                `/${PREFIX}-help - this list`
+              ].join("\n")
+            });
+          } else {
+            appendMessage({
+              sender: "Aariv Bot",
+              isBot: true,
+              text: `Unknown command "${cmd}". Type /${PREFIX}-help to list all 5 commands.`
+            });
+          }
+        } else if (input.toLowerCase().includes("@aariv bot")) {
+          codePreview.textContent = HANDLER_SNIPPETS.mention;
+          addSocketLog("events_api", `event.type="app_mention" user="U08AARIV"`);
+          appendMessage({
+            sender: "Aariv Bot",
+            isBot: true,
+            text: `Hi @Aariv Patel! Type /${PREFIX}-help to see what I can do.`,
+            threadReply: "Replied in thread via say({ thread_ts: event.ts })"
+          });
+        } else {
+          appendMessage({
+            sender: "Aariv Bot",
+            isBot: true,
+            text: `Tip: Mention @Aariv Bot or run a slash command like /${PREFIX}-ping, /${PREFIX}-roll 2d6, or /${PREFIX}-help!`
+          });
+        }
+      }
+
+      chatForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const val = chatInput.value;
+        chatInput.value = "";
+        handleInput(val);
+      });
+
+      document.querySelectorAll(".chip").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          handleInput(btn.getAttribute("data-cmd"));
+        });
+      });
+
+      // Seed initial demonstration conversation
+      addSocketLog("socket_mode", "Connected to Slack Socket Mode (app_id=A0CBXFS7BKL)");
+      handleInput("/aariv-ping");
+      handleInput("/aariv-hello tacos");
+      handleInput("/aariv-roll 2d20");
+      handleInput("/aariv-help");
+    })();
+  </script>
+</body>
+</html>
