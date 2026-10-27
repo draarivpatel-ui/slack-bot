@@ -1,153 +1,83 @@
-# Stardance Slack Bot (`Aariv Bot`)
+# Aariv Bot - My Hack Club Slack Bot + Live Browser Sandbox
 
-**Try the Live Interactive Slack Sandbox in your Browser:** [https://aariv.me/slack-bot/](https://aariv.me/slack-bot/)
+**Try the Live Interactive Slack Sandbox in Your Browser:** [https://aariv.me/slack-bot/](https://aariv.me/slack-bot/)
 
 ![Aariv Bot Interactive Slack Simulator](screenshot.png)
 
-The Hack Club Stardance mission "Make a Slack Bot", built to the jam guide
-(Make your own Slack bot by using JS). The mission page at
-https://jams.hackclub.com/batch/slack-bot/ was 404 from this machine, so the
-guide markdown was pulled from the GitHub repo
-(`hackclub/stardance`, `db/sample_data/slack_bot_guide_js.md`).
+I built **Aariv Bot** for the Hack Club Stardance **"Make a Slack Bot"** mission. It is a Node.js + **Slack Bolt (`@slack/bolt`)** bot running over **Socket Mode** (`index.js`) configured for the Hack Club Slack workspace (App ID `A0CBXFS7BKL`), paired with an interactive browser-based `#stardance-bot-testing` Slack simulator (`index.html`) so anyone can test all five `/aariv-*` slash commands and `@Aariv Bot` mentions immediately in the browser.
 
-Stack is the guide's: Node.js, Slack Bolt, Socket Mode, dotenv, axios, plus a
-browser-based interactive `#stardance-bot-testing` Slack channel simulator
-(`index.html`) so reviewers can test all five `/aariv-*` slash commands and
-`@Aariv Bot` mentions immediately in the browser.
+---
 
-## The commands
+## Why I Built This
 
-All five use the `/aariv-` prefix because the guide warns that generic command
-names like `/ping` collide with other bots in the Hack Club workspace (the
-most recently installed bot steals the command).
+When you build a Slack bot inside a huge shared workspace like the Hack Club Slack, two things become annoying right away:
+1. **Slash command collisions**: If fifty people register `/ping` or `/roll` in the same workspace, only the most recently installed bot receives the payload. That is why I namespaced all five of my slash commands under `/aariv-*` (`PREFIX = "/aariv-"` at the top of `index.js`).
+2. **Testing when your local laptop is asleep**: Since Socket Mode bots run as a local Node.js process over WebSockets (`xapp-` token), a reviewer looking at your GitHub repo when your terminal isn't running can't easily see the bot respond. To solve that, I also built an interactive `#stardance-bot-testing` web sandbox at [https://aariv.me/slack-bot/](https://aariv.me/slack-bot/) that runs the exact command handlers alongside a live Socket Mode WebSocket frame inspector!
 
-| Command | What it does |
-| --- | --- |
-| `/aariv-ping` | The guide's first command. Replies Pong with the latency. |
-| `/aariv-hello` | Greets you by display name. `/aariv-hello tacos` greets you about tacos. |
-| `/aariv-roll` | Dice roller. Bare `/aariv-roll` rolls 1d6, `/aariv-roll 2d20` rolls two twenties and totals them. |
-| `/aariv-fact` | The guide's "fun facts bot" extension idea. Pulls a random fact, with a second API as backup. |
-| `/aariv-help` | Lists every command. |
+---
 
-It also replies in a thread when you @-mention it (that is what the
-`app_mentions:read` scope is for).
+## All 5 Slash Commands & Event Handlers
 
-## Files
+| Command / Trigger | Example Input | What I Built It to Do |
+|-------------------|---------------|-----------------------|
+| **`/aariv-ping`** | `/aariv-ping` | Immediately calls `await ack()`, calculates the round-trip dispatch latency in milliseconds, and replies with `Pong! (Latency: Nms)`. |
+| **`/aariv-hello`** | `/aariv-hello` or `/aariv-hello tacos` | Looks up the caller's Slack profile via `client.users.info` (falling back gracefully to `command.user_name` if `users:read` is absent) and greets you by display name—with an extra message if you pass a topic like `tacos`. |
+| **`/aariv-roll`** | `/aariv-roll` or `/aariv-roll 3d20` | Full tabletop dice parser (`/^\s*(\d+)?d(\d+)\s*$/i`). Bare `/aariv-roll` rolls `1d6`; passing `NdM` (up to 20 dice of up to 1000 sides) rolls each die individually, prints the breakdown (`[14, 7, 19]`), and sums the total. |
+| **`/aariv-fact`** | `/aariv-fact` | Fetches a random verified fact using `axios` from `uselessfacts.jsph.pl/api/v2/facts/random`, with automatic failover to `catfact.ninja/fact` if the primary API times out or errors. |
+| **`/aariv-help`** | `/aariv-help` | Prints a formatted Block Kit / Markdown reference sheet of all `/aariv-*` slash commands and mention triggers. |
+| **`@Aariv Bot`** | `@Aariv Bot hey there!` | Listens to the `app_mention` event (`app_mentions:read` scope) and replies inside the message thread (`thread_ts: event.thread_ts || event.ts`). |
+
+---
+
+## How It Works Under the Hood
+
+- **Slack Bolt + Socket Mode (`index.js`)**:
+  Instead of exposing an HTTP webhook port through ngrok, `index.js` initializes `@slack/bolt` with `socketMode: true` and `appToken: process.env.SLACK_APP_TOKEN`. That opens an outbound WebSocket connection to Slack's event router so slash commands and `app_mention` events stream straight to the local Node process.
+- **Fail-Fast Environment Validation**:
+  Before calling `app.start()`, I wrote a startup check that verifies `SLACK_BOT_TOKEN` (`xoxb-...`), `SLACK_SIGNING_SECRET`, and `SLACK_APP_TOKEN` (`xapp-...`) are all present in `.env`, printing a clear human-readable checklist if any token is missing.
+- **Interactive `#stardance-bot-testing` Web Simulator (`index.html`)**:
+  The browser sandbox lets you click quick-run chips or type any `/aariv-*` command into a Slack-style composer. Every command logs the simulated Socket Mode `slash_commands` or `events_api` JSON envelope (`envelope_id`, `payload`, `ack()` timing) in the right-hand inspector panel so you can see how Bolt processes requests under the hood.
+
+---
+
+## What Was Tricky to Build
+
+1. **The 3-Second Slack `ack()` Deadline on External API Calls**:
+   Slack requires every slash command to acknowledge (`await ack()`) within 3000ms, or the user sees `operation_timed_out`. In `/aariv-fact`, waiting for an external HTTP request before calling `ack()` risked timing out on slow connections. Calling `await ack()` on the very first line of every command handler before firing the `axios.get()` request with a `4000ms` timeout and secondary API fallback made `/aariv-fact` completely reliable.
+2. **Thread-Safe `@Aariv Bot` Replies**:
+   When someone mentions `@Aariv Bot` inside an existing Slack thread, passing only `event.ts` as `thread_ts` starts a *nested* reply on the child message instead of staying in the parent thread. Using `thread_ts: event.thread_ts || event.ts` keeps every mention response cleanly attached to the root conversation.
+
+---
+
+## Repository Files
 
 | File | Purpose |
 | --- | --- |
-| `index.js` | The whole Node.js + Bolt Socket Mode bot. Change `PREFIX` here if you ever rename the commands. |
-| `index.html` | Interactive `#stardance-bot-testing` browser simulator for testing all 5 slash commands and Socket Mode events live at [https://aariv.me/slack-bot/](https://aariv.me/slack-bot/). |
-| `screenshot.png` | Screenshot of the bot simulator and Socket Mode inspector. |
-| `package.json` | Declares `@slack/bolt`, `dotenv`, `axios`. `npm start` runs the bot. |
-| `.env.example` | Template for the three secrets. Copy it to `.env` and fill it in. |
-| `.gitignore` | Keeps `.env` and `node_modules` out of any repo. |
-| `BUILD-LOG.md` | Dated devlog of the build session. |
+| `index.js` | Complete Node.js + `@slack/bolt` Socket Mode bot implementing all 5 `/aariv-*` slash commands and `app_mention` threaded replies. |
+| `index.html` | Interactive `#stardance-bot-testing` Slack workspace simulator and Socket Mode payload inspector at [https://aariv.me/slack-bot/](https://aariv.me/slack-bot/). |
+| `package.json` | Node dependencies (`@slack/bolt`, `dotenv`, `axios`) and `npm start` script. |
+| `.env.example` | Template for `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, and `SLACK_APP_TOKEN`. |
+| `screenshot.png` | Screenshot of Aariv Bot running inside the interactive simulator. |
+| `BUILD-LOG.md` | Step-by-step engineering log. |
 
-## Setup checklist
+---
 
-Do these in order. Budget about 15 minutes. You need to be signed in to Slack
-with the Hack Club workspace open (not another workspace).
+## How to Run the Bot Locally
 
-### Step 1. Create the Slack app
+### Option 1: Try the Browser Sandbox Instantly
+Open **[https://aariv.me/slack-bot/](https://aariv.me/slack-bot/)** to run `/aariv-ping`, `/aariv-hello`, `/aariv-roll 2d20`, `/aariv-fact`, `/aariv-help`, and `@Aariv Bot` mentions right in your browser.
 
-1. Open https://api.slack.com/apps and click **Create New App**.
-2. Choose **From scratch**.
-3. Name it (for example `Aariv Bot`) and pick the **Hack Club**
-   workspace in the dropdown. The name is what people see when the bot
-   responds.
-4. Click **Create App**.
-
-### Step 2. Turn on Socket Mode and create the app-level token
-
-1. In the left sidebar click **Socket Mode** and toggle it on.
-2. Slack asks for an app-level token. Go to **Basic Information** in the
-   sidebar, scroll to **App-Level Tokens**, click **Generate Token and
-   Scopes**.
-3. Name it `mission-bot-socket` and add the **`connections:write`** scope.
-4. Click **Generate** and copy the token right away. It starts with
-   `xapp-`. This is the `SLACK_APP_TOKEN` for Step 6.
-
-### Step 3. Add the bot token scopes
-
-1. Click **OAuth & Permissions** in the sidebar.
-2. Scroll to **Bot Token Scopes** and click **Add an OAuth Scope** for each
-   of these.
-
-   ```txt
-   chat:write
-   commands
-   app_mentions:read
-   channels:history
+### Option 2: Run the Live Socket Mode Bot in Slack
+1. Clone this repo and install dependencies:
+   ```bash
+   npm install
    ```
-
-3. Optional: add **`users:read`** too so `/aariv-hello` can greet
-   people by display name instead of handle. The bot works without it.
-
-### Step 4. Register the five slash commands
-
-For each command below, click **Slash Commands** in the sidebar, then
-**Create New Command**, fill in the three fields, and **Save**. Names are
-case-sensitive and must match the code exactly.
-
-| Command | Short description | Usage hint |
-| --- | --- | --- |
-| `/aariv-ping` | Check the bot is alive and its latency | (leave empty) |
-| `/aariv-hello` | The bot greets you by name | anything, e.g. tacos |
-| `/aariv-roll` | Roll dice in NdM form | e.g. 2d20 or empty for 1d6 |
-| `/aariv-fact` | Get a random fun fact | (leave empty) |
-| `/aariv-help` | List everything the bot can do | (leave empty) |
-
-### Step 5. Install the app to the workspace
-
-1. Click **Install App** in the sidebar, then **Install to Workspace** and
-   allow the permissions.
-2. Back on **OAuth & Permissions**, find **Bot User OAuth Token** and copy
-   it. It starts with `xoxb-`. This is the `SLACK_BOT_TOKEN` for Step 6.
-
-### Step 6. Paste the tokens into .env
-
-In this folder, copy the template and open it.
-
-```bash
-cp .env.example .env
-```
-
-| `.env` key | Where it comes from | Looks like |
-| --- | --- | --- |
-| `SLACK_BOT_TOKEN` | OAuth & Permissions, after Step 5 | `xoxb-...` |
-| `SLACK_SIGNING_SECRET` | Basic Information, **App Credentials** section | a random string |
-| `SLACK_APP_TOKEN` | Basic Information, App-Level Tokens, from Step 2 | `xapp-...` |
-
-### Step 7. Install dependencies and run
-
-```bash
-npm install
-npm start
-```
-
-Wait for `bot is running!` in the terminal. Leave the terminal open while
-testing.
-
-### Step 8. Test every command
-
-In the Hack Club Slack (or in the live simulator at [https://aariv.me/slack-bot/](https://aariv.me/slack-bot/)):
-
-| Type | Expect |
-| --- | --- |
-| `/aariv-ping` | `Pong! Latency Nms` |
-| `/aariv-hello` | A greeting with your display name |
-| `/aariv-roll` | One d6 roll |
-| `/aariv-roll 2d20` | Two d20 rolls and a total |
-| `/aariv-fact` | A random fun fact |
-| `/aariv-help` | The command list |
-| `@Aariv Bot hi` | A threaded reply |
-
-## Status (2026-10-25)
-
-The Slack app "Aariv Bot" is created and configured in the Hack Club
-workspace (app id A0CBXFS7BKL): five slash commands (`/aariv-ping`, `/aariv-hello`,
-`/aariv-roll`, `/aariv-fact`, `/aariv-help`), bot scopes (`chat:write`, `commands`,
-`app_mentions:read`, `channels:history`, `users:read`), `app_mention` event, and Socket
-Mode enabled. Reviewers can also test all 5 commands immediately in the browser
-at [https://aariv.me/slack-bot/](https://aariv.me/slack-bot/).
+2. Copy `.env.example` to `.env` and fill in your Slack App credentials from [api.slack.com/apps](https://api.slack.com/apps) (Socket Mode enabled with `connections:write` for `SLACK_APP_TOKEN`, and Bot Token Scopes `chat:write`, `commands`, `app_mentions:read`, `channels:history`, `users:read` for `SLACK_BOT_TOKEN`):
+   ```bash
+   cp .env.example .env
+   ```
+3. Start the bot:
+   ```bash
+   npm start
+   ```
+4. Once the terminal prints `⚡ Aariv Bot is running in Socket Mode!`, run `/aariv-ping`, `/aariv-roll 2d20`, or `/aariv-fact` in your Slack channel!
