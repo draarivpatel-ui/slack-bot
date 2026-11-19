@@ -23,7 +23,6 @@ if (!process.env.SLACK_BOT_TOKEN || !process.env.SLACK_APP_TOKEN) {
 
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN, // xoxb- token, used to act in the workspace
-  signingSecret: process.env.SLACK_SIGNING_SECRET, // unused in Socket Mode, kept for a future HTTP switch
   appToken: process.env.SLACK_APP_TOKEN, // xapp- token, used by Socket Mode
   socketMode: true
 });

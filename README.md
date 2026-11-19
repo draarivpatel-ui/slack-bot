@@ -31,7 +31,7 @@ When you build a Slack bot inside a huge shared workspace like the Hack Club Sla
 - **Slack Bolt + Socket Mode (`index.js`)**:
   Instead of exposing an HTTP webhook port through ngrok, `index.js` initializes `@slack/bolt` with `socketMode: true` and `appToken: process.env.SLACK_APP_TOKEN`. That opens an outbound WebSocket connection to Slack's event router so slash commands and `app_mention` events stream straight to the local Node process.
 - **Fail-Fast Environment Validation**:
-  Before calling `app.start()`, I wrote a startup check that verifies `SLACK_BOT_TOKEN` (`xoxb-...`), `SLACK_SIGNING_SECRET`, and `SLACK_APP_TOKEN` (`xapp-...`) are all present in `.env`, printing a clear human-readable checklist if any token is missing.
+  Before calling `app.start()`, the startup check verifies that `SLACK_BOT_TOKEN` (`xoxb-...`) and `SLACK_APP_TOKEN` (`xapp-...`) are both present, printing a checklist if either token is missing.
 - **Interactive `#stardance-bot-testing` Web Simulator (`index.html`)**:
   The browser sandbox lets you click quick-run chips or type any `/aariv-*` command into a Slack-style composer. Every command logs the simulated Socket Mode `slash_commands` or `events_api` JSON envelope (`envelope_id`, `payload`, `ack()` timing) in the right-hand inspector panel so you can see how Bolt processes requests under the hood.
 
@@ -51,7 +51,7 @@ When you build a Slack bot inside a huge shared workspace like the Hack Club Sla
 | `index.js` | Complete Node.js + `@slack/bolt` Socket Mode bot implementing all 5 `/aariv-*` slash commands and `app_mention` threaded replies. |
 | `index.html` | Interactive `#stardance-bot-testing` Slack workspace simulator and Socket Mode payload inspector at [https://aariv.me/slack-bot/](https://aariv.me/slack-bot/). |
 | `package.json` | Node dependencies (`@slack/bolt`, `dotenv`, `axios`) and `npm start` script. |
-| `.env.example` | Template for `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, and `SLACK_APP_TOKEN`. |
+| `.env.example` | Template for `SLACK_BOT_TOKEN` and `SLACK_APP_TOKEN`. |
 | `screenshot.png` | Screenshot of Aariv Bot running inside the interactive simulator. |
 
 
